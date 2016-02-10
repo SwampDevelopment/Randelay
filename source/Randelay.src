@@ -1,0 +1,242 @@
+;***********************************************************************************
+;               RANDELAY V1.0 rev A - Delay Timmer (USING PIC16C54)
+;                    BY Brian T. Merchant For Hirst Tech 02/20016
+;
+;               Using Parallax PASM Assembler, Based on Dominio rev G code
+;***********************************************************************************
+;               
+;				Re-Tasked the Randio program to not be random but 
+;				to have a setable delay time
+;
+;***********************************************************************************
+;                                       PIC16C54
+;                       1 = RA2 white in                18 = RA1 
+;                       2 = RA3 LED Out                 17 = RA0
+;                       3 = RTCC                        16 = OSC1
+;                       4 = MCLR                        15 = OSC2
+;                       5 = VSS                         14 = VDD
+;                       6 = RB0 Control Out             13 = RB7
+;                       7 = RB1 Aux Out 1               12 = RB6
+;                       8 = RB2 Aux Out 2               11 = RB5
+;                       9 = RB3                         10 = RB4
+;
+;***********************************************************************************
+;
+;           timing based on 4MHZ crystal  assembler = parallax pasm
+;                       for RC OSC, uncomment correct DEVICE line, and change
+;                       IIME10MS equ constant to match type
+;
+;
+            DEVICE  pic16c54,XT_OSC,WDT_OFF,PROTECT_ON
+;			DEVICE  pic16c54,RC_OSC,WDT_OFF,PROTECT_ON
+			ID      CHECKSUM
+			RESET   start
+
+;                       DEFINE CONSTANTS
+TIME10MS        equ     78              ;adjust timing here
+					;8mhz=78 4mhz = 39, 1mhz = 10, rc = 
+					;X 10 ms  ,, 5 = PIO CLOCK
+
+
+;                       ALOCATE MEMORY REGISTERS
+		org     8               ;24 GP ram locations from 08h to 1Fh
+
+mseconds_10     ds      1       ;08
+mseconds_50     ds      1       ;09
+seconds         ds      1       ;0A
+pre_sec         ds      1       ;0B
+temp1           ds      1       ;0C
+pre_rtcc        ds      1       ;0D
+time10          ds      1       ;0E
+timer           ds      2       ;10
+debounce        ds      2       ;12
+flag            ds      1       ;13     ;"well really you know what this one is, right!"
+counter_10ms_a  ds      1       ;14     ;used to time 10ms per count, clr before counting
+counter_10ms_b  ds      1       ;15     ;used to time 10ms per count, clr before counting
+counter_50ms_a  ds      1       ;16     ;used to time 10ms per count, clr before counting
+counter_50ms_b  ds      1       ;17     ;used to time 50ms per count, clr before counting
+switch          ds      1       ;1A     ;used to hold the mode setup value
+debcounter      ds      3       ;1B     ;used to debounce inputs
+minutes_a       ds      1       ;1C     ;used for watch dog timmer
+seed                    ds              1               ;1D     ;used to hold the seed for the number generater
+r_count                 ds              1               ;1E     ;Used to count interval between white noise pulses
+s_count                 ds              1               ;1F             ;counts reps to add to seed (8)(one byte)
+
+;               LABELS 
+
+whitein         equ     RA.2            ;Used to seed random timmer
+LED             equ     RA.3            ;Output to life light
+control         equ     RB.0            ;Control Output
+auxout1         equ     RB.1            ;Auxillary Output 1
+auxout2         equ     RB.2            ;Auxillary Output 2
+
+key_flag        equ     flag.0          ;signals key sw input received
+sync10          equ     flag.1          ;use to count 10 ms timings
+sync50          equ     flag.2          ;use to count 50 ms timings
+key_active      equ     flag.3          ;used to triger key debounce
+white_flag      equ     flag.4          ;signals whitein sw input received
+white_active    equ     flag.5          ;used to triger whitein debounce
+
+
+
+
+		org     0h
+;---------------------------------------------------------------------------------------------                
+;Interupt Service Routine
+;---------------------------------------------------------------------------------------------
+time 
+		inc             r_count                         ;just keep counting till a white noise pulse then analyse
+
+;......................................
+;whitein Input
+
+
+:t205
+		jb      white_flag,:t275       ;if pulse detected skip down to section b
+		jb      white_active,:t210     ;input detected, "debouncing"
+;               jb      whitein,:t300
+;               setb    white_active
+;               clr     debcounter+1
+:t210
+		jnb      whitein,:t250                  ;any noise comming in, else just keep counting (r_count)
+;**********************************************  S E T  * DEBOUNCE * H E R E 
+;               cjne    debcounter+1,#1,:t300   ;set debounce time here 10ms per count
+		
+		
+;               setb    white_flag             ;input detected and debounced!
+
+		jmp     :t300
+:t250
+;               clr     debcounter+1
+		clrb    white_active
+		jmp             :t300
+:t275
+		jb              whitein,:t300                   ;ok we got a noise pulse in (now for some action)
+		cjb             r_count,#125,:t280              ;if less than 125 load a 0 in the next seed bit else a 1
+		stc
+		rl              seed
+		inc             s_count
+		clrb    white_active
+		jmp             :t300
+		
+:t280
+		clc
+		rl              seed
+		inc             s_count
+		clrb    white_active
+		
+:t300
+		csne    s_count,#8
+		setb    white_flag                              ;ok got the seed, now signal the process
+;----------------------------------------------
+:t600
+		mov     temp1,RTCC
+		mov     W,pre_rtcc
+		mov     W,temp1 - W
+		sub     time10,W
+		jc      :time_exit
+;..............................................................................................
+;Timing Functions
+;....................................... if 10ms has passed do the whiteing
+		mov     time10,#TIME10MS
+		inc     mseconds_10             ;use by routines to count in 10ms inc
+		inc     counter_10ms_a
+		inc     counter_10ms_b
+		inc     debcounter
+		inc     debcounter+1
+		inc     debcounter+2
+		clrb    sync10                  ;signal 10MS time routines
+		jnb             white_flag,:t700
+		dec             seed
+:t700
+		cjne    mseconds_10,#5,:time_exit
+;........................................if 50ms has passed do the whiteing
+		clr     mseconds_10
+		inc     mseconds_50
+		clrb    sync50                  ;Signal 50MS routines
+		inc     counter_50ms_a          ;use by routines to count in 50ms inc
+		inc     counter_50ms_b          ;use by routines to count in 50ms inc
+		cjne    mseconds_50,#2,:time_exit
+;........................................if 1 second has pased do the whiteing
+		clr     mseconds_50
+		inc    seconds
+		xor     RA,#00001000b           ;Flash the life light!
+		cjne    seconds,#60,:time_exit
+;........................................if 1 minute has passed do the whiteing
+		clr    seconds
+		inc     minutes_a               ;watchdog timmer
+		;inc    minutes
+:time_exit
+		mov     pre_rtcc,temp1
+		clr     temp1
+		ret
+;-----------------------------------------------------------------------------------------------
+
+
+;***********************************************************************************************
+; Subroutine Block
+
+;*******************
+clear
+		clr     fsr
+		mov     fsr,#08h
+:loop
+		clr     00h
+		inc     fsr
+		cjne    fsr,#0E0h,:loop
+		clr     fsr
+		ret
+		
+;*******************
+; 
+
+;**********************************************************************************************
+;       Body of main program
+;**********************************************************************************************
+main
+		call    time
+		jnb             white_flag,main
+		       
+process
+		call    time
+		test    seed
+		jnz             process
+		setb    control                         ;Thats it Folks!
+		
+:end_loop       
+		call    time
+		jmp             :end_loop
+			
+
+
+
+
+
+;***********************************************************************************
+;                       INITALISE SYSTEM
+;***********************************************************************************
+start
+		mov     OPTION,#00000111b
+		mov     !RA,#00000100b          
+		mov     !RB,#00000000b
+		mov     RA,#11111111b
+		mov     RB,#11111111b
+		clrb	control							;make sure output is low initialy
+		call    clear
+:s10
+;               djnz    timer,:s10              ;startup delay
+;               djnz    timer+1,:s10
+		mov     time10,#time10ms 
+		clr     RTCC
+		
+:end 
+		jmp     main
+	   
+		retw    'RandDelay Rev A'
+		retw    'Copyright 20016’
+		retw    'by Swamp Development'
+		retw    ‘Nashville, TN.'
+		retw    'For Hirst Technology Inc.'
+		retw    'Ocala, FL.'
+
+:end_of_file
