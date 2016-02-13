@@ -58,9 +58,9 @@ counter_50ms_b  ds      1       ;17     ;used to time 50ms per count, clr before
 switch          ds      1       ;1A     ;used to hold the mode setup value
 debcounter      ds      3       ;1B     ;used to debounce inputs
 minutes_a       ds      1       ;1C     ;used for watch dog timmer
-seed                    ds              1               ;1D     ;used to hold the seed for the number generater
-r_count                 ds              1               ;1E     ;Used to count interval between trigger noise pulses
-s_count                 ds              1               ;1F             ;counts reps to add to seed (8)(one byte)
+seed 			ds 		1 		;1D     ;used to hold the seed for the number generater
+r_count 		ds 		1 		;1E     ;Used to count interval between trigger noise pulses
+s_count 		ds 		1 		;1F 	;counts reps to add to seed (8)(one byte)
 
 ;               LABELS 
 
@@ -80,7 +80,7 @@ trigger_active  equ     flag.5          ;used to triger triggerin debounce
 
 
 
-				org     0h
+		org     0h
 ;---------------------------------------------------------------------------------------------                
 ;Interupt Service Routine
 ;---------------------------------------------------------------------------------------------
