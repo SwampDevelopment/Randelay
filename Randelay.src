@@ -216,7 +216,7 @@ process
 :step_3
 		cjne	counter_10ms_a,#LED_TIME,:step_1b	;use constant to time led(increments of 10ms)
 		xor     RB,#00000100b
-		jmp		:step_1_b
+		jmp		:step_1b
 		
 :end_loop       
 		call    time
@@ -246,7 +246,7 @@ start
 		retw    'RandDelay Rev A'
 		retw    'Copyright 20016'
 		retw    'by Swamp Development'
-		retw    ‘Nashville, TN.'
+		retw    'Nashville, TN.'
 		retw    'For Hirst Technology Inc.'
 		retw    'Ocala, FL.'
 
