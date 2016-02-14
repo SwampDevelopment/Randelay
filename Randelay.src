@@ -74,6 +74,8 @@ LED             equ     RA.3            ;Output to life light
 control         equ     RB.0            ;Control Output (Turns the monitor on or off)
 aux_out_1       equ     RB.1            ;Auxillary Output 1
 aux_out_2       equ     RB.2            ;Auxillary Output 2
+toggle_game		equ		RB.1			;Alias for output 1
+enu_led			equ		RB.2			;Alias for output 2
 
 aux_in_1_flag   equ     flag.0          ;signals Aux 1 sw input received
 sync10          equ     flag.1          ;use to count 10 ms timings
@@ -204,7 +206,7 @@ process
 		call 	time
 		cjne	seconds,#SECONDS_TIMER,:step_2		;watch for the time out
 		setb    control 							;Thats it Folks!
-		setb	RB,#00000010b 						;make sure the anunciator LED is off
+		setb	enu_led		 						;make sure the anunciator LED is off
 		clrb 	trigger_flag						;make ready for a new trigger
 		jmp		main
 :step_2
@@ -213,7 +215,7 @@ process
 		setb 	step_2_flag							;toggle only once per sequence event
 :step_3
 		cjne	counter_10ms_a,#LED_TIME,:step_1b	;use constant to time led(increments of 10ms)
-		xor     RB,#00000100b 
+		xor     enu_led 
 		jmp		:step_1_b
 		
 :end_loop       
@@ -235,7 +237,7 @@ start
 ;       djnz    timer,:s10              ;startup delay
 ;       djnz    timer+1,:s10
 		mov     time10,#time10ms 
-;		setb	RB,#00000010b 			;make sure the anunciator LED is off
+;		setb	enu_led		 			;make sure the anunciator LED is off
 		clr     RTCC
 		
 :end 
