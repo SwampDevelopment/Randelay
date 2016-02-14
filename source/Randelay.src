@@ -204,6 +204,7 @@ process
 		call 	time
 		cjne	seconds,#SECONDS_TIMER,:step_2		;watch for the time out
 		setb    control 							;Thats it Folks!
+		setb	RB,#00000010b 						;make sure the anunciator LED is off
 		clrb 	trigger_flag						;make ready for a new trigger
 		jmp		main
 :step_2
@@ -234,6 +235,7 @@ start
 ;       djnz    timer,:s10              ;startup delay
 ;       djnz    timer+1,:s10
 		mov     time10,#time10ms 
+;		setb	RB,#00000010b 			;make sure the anunciator LED is off
 		clr     RTCC
 		
 :end 
