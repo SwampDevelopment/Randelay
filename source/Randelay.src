@@ -11,13 +11,13 @@
 ;***********************************************************************************
 ;										PIC16C54
 ;						1 = RA2 trigger in				18 = RA1 
-;						2 = RA3 LED Out 				17 = RA0
+;						2 = RA3 LED Out (Life Light)	17 = RA0	Aux In 1
 ;						3 = RTCC                        16 = OSC1
 ;						4 = MCLR                        15 = OSC2
 ;						5 = VSS                         14 = VDD
-;						6 = RB0 Control Out             13 = RB7
-;						7 = RB1 Aux Out 1               12 = RB6
-;						8 = RB2 Aux Out 2               11 = RB5
+;						6 = RB0 Control Out (Monitor)   13 = RB7
+;						7 = RB1 Aux Out 1 (PCB Switch)  12 = RB6
+;						8 = RB2 Aux Out 2 (Panel LED)   11 = RB5
 ;						9 = RB3                         10 = RB4
 ;
 ;***********************************************************************************
@@ -27,15 +27,20 @@
 ;				TIME10MS equ constant to match type
 ;
 ;
- 				DEVICE  pic16c54,XT_OSC,WDT_OFF,PROTECT_ON
-;				DEVICE  pic16c54,RC_OSC,WDT_OFF,PROTECT_ON
+ 				DEVICE  pic16c54,XT_OSC,WDT_OFF,PROTECT_ON	;this line for Crystal
+;				DEVICE  pic16c54,RC_OSC,WDT_OFF,PROTECT_ON	;this line for RC Osc
 				ID      CHECKSUM
 				RESET   start
 
 ;				DEFINE CONSTANTS
-TIME10MS        equ     78		;adjust timing here
+TIME10MS        equ     78		;*** adjust timing here ***
 								;8mhz=78 4mhz = 39, 1mhz = 10, rc = 
 								;X 10 ms  ,, 5 = PIO CLOCK
+
+SECONDS_TIMER	equ		30		;*** SET THE DELAY TIMER HERE ***
+								;*** 1sec per count
+LED_TIME		equ		10		;*** SET THE ANNUNCIATOR LED TIMING HERE ***
+								;*** 10ms per count							
 
 
 ;				ALOCATE MEMORY REGISTERS
@@ -64,19 +69,19 @@ s_count 		ds 		1 		;1F 	;counts reps to add to seed (8)(one byte)
 
 ;               LABELS 
 
-triggerin 		equ     RA.2            ;Used to seed random timmer
+trigger_in 		equ     RA.2            ;Used to trigger the sequence
 LED             equ     RA.3            ;Output to life light
-control         equ     RB.0            ;Control Output
-auxout1         equ     RB.1            ;Auxillary Output 1
-auxout2         equ     RB.2            ;Auxillary Output 2
+control         equ     RB.0            ;Control Output (Turns the monitor on or off)
+aux_out_1       equ     RB.1            ;Auxillary Output 1
+aux_out_2       equ     RB.2            ;Auxillary Output 2
 
-key_flag        equ     flag.0          ;signals key sw input received
+aux_in_1_flag   equ     flag.0          ;signals Aux 1 sw input received
 sync10          equ     flag.1          ;use to count 10 ms timings
 sync50          equ     flag.2          ;use to count 50 ms timings
-key_active      equ     flag.3          ;used to triger key debounce
-trigger_flag    equ     flag.4          ;signals triggerin sw input received
-trigger_active  equ     flag.5          ;used to triger triggerin debounce
-
+aux_in_1_active equ     flag.3          ;used to triger Aux 1 debounce
+trigger_flag    equ     flag.4          ;signals trigger_in sw input received
+trigger_active  equ     flag.5          ;used to triger trigger_in debounce
+step_2_flag		equ		flag.6			;used to control sequence step 2
 
 
 
@@ -85,49 +90,38 @@ trigger_active  equ     flag.5          ;used to triger triggerin debounce
 ;Interupt Service Routine
 ;---------------------------------------------------------------------------------------------
 time 
-		inc     r_count 		        ;just keep counting till a trigger noise pulse then analyse
 
 ;......................................
-;triggerin Input
-
+;trigger_in Input
 
 :t205
 		jb      trigger_flag,:t275 		;if pulse detected skip down to section b
 		jb      trigger_active,:t210 	;input detected, "debouncing"
-;       jb      triggerin,:t300
-;		setb    trigger_active
-;		clr     debcounter+1
+        jb      trigger_in,:t300
+		setb    trigger_active			;start debouncing the low
+		clr     debcounter
 :t210
-		jnb     triggerin,:t250 		;any noise comming in, else just keep counting (r_count)
+		jb     	trigger_in,:t250 		;
 ;**********************************************  S E T  * DEBOUNCE * H E R E 
-;       cjne    debcounter+1,#1,:t300 	;set debounce time here 10ms per count
+       	cjne    debcounter,#1,:t300 	;set debounce time here 10ms per count
 		
 		
-;       setb    trigger_flag            ;input detected and debounced!
+        setb    trigger_flag            ;input detected and debounced! trigger the process
 
 		jmp     :t300
 :t250
-;       clr     debcounter+1
+		clr     debcounter				;low not debounceed yet so clear for next try
 		clrb    trigger_active
 		jmp     :t300
 :t275
-		jb      triggerin,:t300 		;ok we got a noise pulse in (now for some action)
-		cjb     r_count,#125,:t280 		;if less than 125 load a 0 in the next seed bit else a 1
-		stc
-		rl      seed
-		inc     s_count
-		clrb    trigger_active
+		jb      trigger_in,:t280 		;ok we got a noise pulse in (now for some action)
 		jmp     :t300
 		
 :t280
-		clc
-		rl      seed
-		inc     s_count
-		clrb    trigger_active
+		clrb    trigger_active			; reset for next time
 		
 :t300
-		csne    s_count,#8
-		setb    trigger_flag 			;ok got the seed, now signal the process
+		
 ;----------------------------------------------
 :t600
 		mov     temp1,RTCC
@@ -137,7 +131,7 @@ time
 		jc      :time_exit
 ;..............................................................................................
 ;Timing Functions
-;.......................................if 10ms has passed do the triggering
+;.......................................if 10ms has passed do the trigger_ing
 		mov     time10,#TIME10MS
 		inc     mseconds_10 			;use by routines to count in 10ms inc
 		inc     counter_10ms_a
@@ -150,19 +144,19 @@ time
 		dec     seed
 :t700
 		cjne    mseconds_10,#5,:time_exit
-;........................................if 50ms has passed do the triggering
+;........................................if 50ms has passed do the trigger_ing
 		clr     mseconds_10
 		inc     mseconds_50
 		clrb    sync50                  ;Signal 50MS routines
 		inc     counter_50ms_a          ;use by routines to count in 50ms inc
 		inc     counter_50ms_b          ;use by routines to count in 50ms inc
 		cjne    mseconds_50,#2,:time_exit
-;.......................................if 1 second has pased do the triggering
+;.......................................if 1 second has pased do the trigger_ing
 		clr     mseconds_50
 		inc    	seconds
 		xor     RA,#00001000b           ;Flash the life light!
 		cjne    seconds,#60,:time_exit
-;.......................................if 1 minute has passed do the triggering
+;.......................................if 1 minute has passed do the trigger_ing
 		clr    	seconds
 		inc     minutes_a               ;watchdog timmer
 		;inc    minutes
@@ -198,19 +192,32 @@ main
 		jnb		trigger_flag,main
 		       
 process
+		clr 	seconds								;prepare to sync timmers
+:sync
 		call	time
-		test    seed
-		jnz     process
-		setb    control 				;Thats it Folks!
+		test	seconds
+		jz		:sync								;loop until synced
+:step_1
+		clr 	seconds
+		clrb	Control 							;turn the monitor off
+:step_1b
+		call 	time
+		cjne	seconds,#SECONDS_TIMER,:step_2		;watch for the time out
+		setb    control 							;Thats it Folks!
+		clrb 	trigger_flag						;make ready for a new trigger
+		jmp		main
+:step_2
+		cjb		step_2_flag,:step_3
+		xor     RB,#00000010b 						;toggle the game PCBs
+		setb 	step_2_flag							;toggle only once per sequence event
+:step_3
+		cjne	counter_10ms_a,#LED_TIME,:step_1b	;use constant to time led(increments of 10ms)
+		xor     RB,#00000100b 
+		jmp		:step_1_b
 		
 :end_loop       
 		call    time
 		jmp     :end_loop
-			
-
-
-
-
 
 ;***********************************************************************************
 ;                       INITALISE SYSTEM
