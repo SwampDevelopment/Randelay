@@ -210,12 +210,12 @@ process
 		clrb 	trigger_flag						;make ready for a new trigger
 		jmp		main
 :step_2
-		cjb		step_2_flag,:step_3
+		jb		step_2_flag,:step_3
 		xor     RB,#00000010b 						;toggle the game PCBs
 		setb 	step_2_flag							;toggle only once per sequence event
 :step_3
 		cjne	counter_10ms_a,#LED_TIME,:step_1b	;use constant to time led(increments of 10ms)
-		xor     enu_led 
+		xor     RB,#00000100b
 		jmp		:step_1_b
 		
 :end_loop       
@@ -244,7 +244,7 @@ start
 		jmp     main
 	   
 		retw    'RandDelay Rev A'
-		retw    'Copyright 20016’
+		retw    'Copyright 20016'
 		retw    'by Swamp Development'
 		retw    ‘Nashville, TN.'
 		retw    'For Hirst Technology Inc.'
