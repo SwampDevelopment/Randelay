@@ -20,6 +20,8 @@
 ;						8 = RB2 Aux Out 2 (Panel LED)   11 = RB5
 ;						9 = RB3                         10 = RB4
 ;
+;						RB0 Monitor L=On H=Off
+;
 ;***********************************************************************************
 ;
 ;				timing based on 4MHZ crystal  assembler = parallax pasm
@@ -39,7 +41,7 @@ TIME10MS        equ     78		;*** adjust timing here ***
 
 SECONDS_TIMER	equ		30		;*** SET THE DELAY TIMER HERE ***
 								;*** 1sec per count
-LED_TIME		equ		10		;*** SET THE ANNUNCIATOR LED TIMING HERE ***
+LED_TIME		equ		5		;*** SET THE ANNUNCIATOR LED TIMING HERE ***
 								;*** 10ms per count							
 
 
@@ -56,10 +58,10 @@ time10          ds      1       ;0E
 timer           ds      2       ;10
 debounce        ds      2       ;12
 flag            ds      1       ;13     ;"well really you know what this one is, right!"
-counter_10ms_a  ds      1       ;14     ;used to time 10ms per count, clr before counting
-counter_10ms_b  ds      1       ;15     ;used to time 10ms per count, clr before counting
-counter_50ms_a  ds      1       ;16     ;used to time 10ms per count, clr before counting
-counter_50ms_b  ds      1       ;17     ;used to time 50ms per count, clr before counting
+counter_10ms_a  ds      1       ;14     ;used to time 10ms per count, set sync bit before counting
+counter_10ms_b  ds      1       ;15     ;used to time 10ms per count, set sync bit before counting
+counter_50ms_a  ds      1       ;16     ;used to time 10ms per count, set sync bit before counting
+counter_seconds ds      1       ;17     ;used to time 1second per count, set sync bit before counting
 switch          ds      1       ;1A     ;used to hold the mode setup value
 debcounter      ds      3       ;1B     ;used to debounce inputs
 minutes_a       ds      1       ;1C     ;used for watch dog timmer
@@ -78,12 +80,11 @@ toggle_game		equ		RB.1			;Alias for output 1
 enu_led			equ		RB.2			;Alias for output 2
 
 aux_in_1_flag   equ     flag.0          ;signals Aux 1 sw input received
-sync10          equ     flag.1          ;use to count 10 ms timings
-sync50          equ     flag.2          ;use to count 50 ms timings
-aux_in_1_active equ     flag.3          ;used to triger Aux 1 debounce
-trigger_flag    equ     flag.4          ;signals trigger_in sw input received
-trigger_active  equ     flag.5          ;used to triger trigger_in debounce
-step_2_flag		equ		flag.6			;used to control sequence step 2
+aux_in_1_active equ     flag.1          ;used to triger Aux 1 debounce
+trigger_flag    equ     flag.2          ;signals trigger_in sw input received
+trigger_active  equ     flag.3          ;used to triger trigger_in debounce
+sync            equ     flag.4          ;use to sync or zero out the timers
+step_2_flag		equ		flag.5			;used to control toggle pcb step
 
 
 
@@ -91,12 +92,12 @@ step_2_flag		equ		flag.6			;used to control sequence step 2
 ;---------------------------------------------------------------------------------------------                
 ;Interupt Service Routine
 ;---------------------------------------------------------------------------------------------
-time 
+time
 
-;......................................
+;.............................................................................................
+
 ;trigger_in Input
 
-:t205
 		jb      trigger_flag,:t275 		;if pulse detected skip down to section b
 		jb      trigger_active,:t210 	;input detected, "debouncing"
         jb      trigger_in,:t300
@@ -105,7 +106,7 @@ time
 :t210
 		jb     	trigger_in,:t250 		;
 ;**********************************************  S E T  * DEBOUNCE * H E R E 
-       	cjne    debcounter,#1,:t300 	;set debounce time here 10ms per count
+       	cjne    debcounter,#1,:t300 	;set debounce time here 10ms per count(decrements in below)
 		
 		
         setb    trigger_flag            ;input detected and debounced! trigger the process
@@ -141,21 +142,17 @@ time
 		inc     debcounter
 		inc     debcounter+1
 		inc     debcounter+2
-		clrb    sync10                  ;signal 10MS time routines
-		jnb     trigger_flag,:t700
-		dec     seed
 :t700
 		cjne    mseconds_10,#5,:time_exit
 ;........................................if 50ms has passed do the trigger_ing
 		clr     mseconds_10
 		inc     mseconds_50
-		clrb    sync50                  ;Signal 50MS routines
 		inc     counter_50ms_a          ;use by routines to count in 50ms inc
-		inc     counter_50ms_b          ;use by routines to count in 50ms inc
 		cjne    mseconds_50,#2,:time_exit
 ;.......................................if 1 second has pased do the trigger_ing
 		clr     mseconds_50
 		inc    	seconds
+		inc 	counter_seconds
 		xor     RA,#00001000b           ;Flash the life light!
 		cjne    seconds,#60,:time_exit
 ;.......................................if 1 minute has passed do the trigger_ing
@@ -163,6 +160,17 @@ time
 		inc     minutes_a               ;watchdog timmer
 		;inc    minutes
 :time_exit
+
+;sync the timers
+;......................................
+		jnb		sync,:tsync				;reset timmers if signaled by sync bit H
+		clr 	counter_10ms_a
+		clr 	counter_10ms_b 
+		clr 	counter_50ms_a
+		clr 	counter_seconds
+		clrb 	sync
+:tsync		
+;......................................
 		mov     pre_rtcc,temp1
 		clr     temp1
 		ret
@@ -184,38 +192,32 @@ clear
 		ret
 		
 ;*******************
-; 
 
 ;**********************************************************************************************
 ;       Body of main program
 ;**********************************************************************************************
 main
 		call	time
-		jnb		trigger_flag,main
-		       
+		jnb		trigger_flag,main		       
 process
-		clr 	seconds								;prepare to sync timmers
-:sync
-		call	time
-		test	seconds
-		jz		:sync								;loop until synced
+		setb 	sync 									;signal reset of timers
 :step_1
-		clr 	seconds
-		clrb	Control 							;turn the monitor off
+		setb	Control 								;turn the monitor off
 :step_1b
 		call 	time
-		cjne	seconds,#SECONDS_TIMER,:step_2		;watch for the time out
-		setb    control 							;Thats it Folks!
-		setb	enu_led		 						;make sure the anunciator LED is off
-		clrb 	trigger_flag						;make ready for a new trigger
+		cjne	counter_seconds,#SECONDS_TIMER,:step_2	;watch for the time out
+		clrb    control 								;Thats it Folks!
+		setb	enu_led		 							;make sure the anunciator LED is off
+		clr  	flag									;make ready for a new trigger
 		jmp		main
 :step_2
 		jb		step_2_flag,:step_3
-		xor     RB,#00000010b 						;toggle the game PCBs
-		setb 	step_2_flag							;toggle only once per sequence event
+		xor     RB,#00000010b 							;toggle the game PCBs
+		setb 	step_2_flag								;toggle only once per sequence event
 :step_3
-		cjne	counter_10ms_a,#LED_TIME,:step_1b	;use constant to time led(increments of 10ms)
+		cjne	counter_10ms_a,#LED_TIME,:step_1b		;use constant to time led(increments of 10ms)
 		xor     RB,#00000100b
+		clr 	counter_10ms_a
 		jmp		:step_1b
 		
 :end_loop       
@@ -227,7 +229,7 @@ process
 ;***********************************************************************************
 start
 		mov     OPTION,#00000111b
-		mov     !RA,#00000100b          
+		mov     !RA,#00000101b          
 		mov     !RB,#00000000b
 		mov     RA,#11111111b
 		mov     RB,#11111111b
