@@ -1,52 +1,51 @@
 ;***********************************************************************************
-;				RANDELAY V1.0 rev A - Delay Timmer (USING PIC16C54)
-;					BY Brian T. Merchant For Hirst Tech 02/20016
+;                RANDELAY V1.0 rev A - Delay Timmer (USING PIC16C54)
+;                  BY Brian T. Merchant For Hirst Tech 02/20016
 ;
-;				Using Parallax PASM Assembler, Based on Dominio rev G code
+;                Using Parallax PASM Assembler, Based on Dominio rev G code
 ;***********************************************************************************
 ;               
-;				Re-Tasked the Randio program to not be random but 
-;				to have a setable delay time
+;                Re-Tasked the Randio program to not be random but 
+;                to have a setable delay time
 ;
 ;***********************************************************************************
-;										PIC16C54
-;						1 = RA2 trigger in				18 = RA1 
-;						2 = RA3 LED Out (Life Light)	17 = RA0	Aux In 1
-;						3 = RTCC                        16 = OSC1
-;						4 = MCLR                        15 = OSC2
-;						5 = VSS                         14 = VDD
-;						6 = RB0 Control Out (Monitor)   13 = RB7
-;						7 = RB1 Aux Out 1 (PCB Switch)  12 = RB6
-;						8 = RB2 Aux Out 2 (Panel LED)   11 = RB5
-;						9 = RB3                         10 = RB4
+;                                 PIC16C54                   Pin Assignments
+;                1 = RA2 trigger in              18 = RA1 
+;                2 = RA3 LED Out (Life Light)    17 = RA0    Aux In 1
+;                3 = RTCC                        16 = OSC1
+;                4 = MCLR                        15 = OSC2
+;                5 = VSS                         14 = VDD
+;                6 = RB0 Control Out (Monitor)   13 = RB7
+;                7 = RB1 Aux Out 1 (PCB Switch)  12 = RB6
+;                8 = RB2 Aux Out 2 (Panel LED)   11 = RB5
+;                9 = RB3                         10 = RB4
 ;
-;						RB0 Monitor L=On H=Off
+;                RB0 Monitor L=On H=Off
 ;
 ;***********************************************************************************
 ;
-;				timing based on 4MHZ crystal  assembler = parallax pasm
-;				for RC OSC, uncomment correct DEVICE line, and change
-;				TIME10MS equ constant to match type
+;               timing based on 4MHZ crystal  assembler = parallax pasm
+;               for RC OSC, uncomment correct DEVICE line, and change
+;               TIME10MS equ constant to match type
 ;
 ;
- 				DEVICE  pic16c54,XT_OSC,WDT_OFF,PROTECT_ON	;this line for Crystal
-;				DEVICE  pic16c54,RC_OSC,WDT_OFF,PROTECT_ON	;this line for RC Osc
-				ID      CHECKSUM
-				RESET   start
+                DEVICE  pic16c54,XT_OSC,WDT_OFF,PROTECT_ON	;this line for Crystal
+;               DEVICE  pic16c54,RC_OSC,WDT_OFF,PROTECT_ON	;this line for RC Osc
+                ID      CHECKSUM
+                RESET   start
 
-;				DEFINE CONSTANTS
-TIME10MS        equ     78		;*** adjust timing here ***
-								;8mhz=78 4mhz = 39, 1mhz = 10, rc = 
-								;X 10 ms  ,, 5 = PIO CLOCK
+;               DEFINE CONSTANTS
+TIME10MS        equ     78      ;*** adjust timing here ***
+                                ;8mhz=78 4mhz = 39, 1mhz = 10, rc = 
+                                ;X 10 ms  ,, 5 = PIO CLOCK
 
-SECONDS_TIMER	equ		30		;*** SET THE DELAY TIMER HERE ***
-								;*** 1sec per count
-LED_TIME		equ		5		;*** SET THE ANNUNCIATOR LED TIMING HERE ***
-								;*** 10ms per count							
+SECONDS_TIMER   equ     30      ;*** SET THE DELAY TIMER HERE ***
+                                ;*** 1sec per count
+LED_TIME        equ     5       ;*** SET THE ANNUNCIATOR LED TIMING HERE ***
+                                ;*** 10ms per count							
 
-
-;				ALOCATE MEMORY REGISTERS
-				org     8		;24 GP ram locations from 08h to 1Fh
+;               ALOCATE MEMORY REGISTERS
+                org     8       ;24 GP ram locations from 08h to 1Fh
 
 mseconds_10     ds      1       ;08
 mseconds_50     ds      1       ;09
@@ -65,30 +64,25 @@ counter_seconds ds      1       ;17     ;used to time 1second per count, set syn
 switch          ds      1       ;1A     ;used to hold the mode setup value
 debcounter      ds      3       ;1B     ;used to debounce inputs
 minutes_a       ds      1       ;1C     ;used for watch dog timmer
-seed 			ds 		1 		;1D     ;used to hold the seed for the number generater
-r_count 		ds 		1 		;1E     ;Used to count interval between trigger noise pulses
-s_count 		ds 		1 		;1F 	;counts reps to add to seed (8)(one byte)
 
 ;               LABELS 
 
-trigger_in 		equ     RA.2            ;Used to trigger the sequence
+trigger_in      equ     RA.2            ;Used to trigger the sequence
 LED             equ     RA.3            ;Output to life light
 control         equ     RB.0            ;Control Output (Turns the monitor on or off)
 aux_out_1       equ     RB.1            ;Auxillary Output 1
 aux_out_2       equ     RB.2            ;Auxillary Output 2
-toggle_game		equ		RB.1			;Alias for output 1
-enu_led			equ		RB.2			;Alias for output 2
+toggle_game     equ     RB.1            ;Alias for output 1
+enu_led         equ     RB.2            ;Alias for output 2
 
 aux_in_1_flag   equ     flag.0          ;signals Aux 1 sw input received
 aux_in_1_active equ     flag.1          ;used to triger Aux 1 debounce
 trigger_flag    equ     flag.2          ;signals trigger_in sw input received
 trigger_active  equ     flag.3          ;used to triger trigger_in debounce
 sync            equ     flag.4          ;use to sync or zero out the timers
-step_2_flag		equ		flag.5			;used to control toggle pcb step
+step_2_flag     equ     flag.5          ;used to control toggle pcb step
 
-
-
-		org     0h
+				org     0h
 ;---------------------------------------------------------------------------------------------                
 ;Interupt Service Routine
 ;---------------------------------------------------------------------------------------------
@@ -98,98 +92,92 @@ time
 
 ;trigger_in Input
 
-		jb      trigger_flag,:t275 		;if pulse detected skip down to section b
-		jb      trigger_active,:t210 	;input detected, "debouncing"
+        jb      trigger_flag,:t275      ;if pulse detected skip down to section b
+        jb      trigger_active,:t210    ;input detected, "debouncing"
         jb      trigger_in,:t300
-		setb    trigger_active			;start debouncing the low
-		clr     debcounter
+        setb    trigger_active          ;start debouncing the low
+        clr     debcounter
 :t210
-		jb     	trigger_in,:t250 		;
-;**********************************************  S E T  * DEBOUNCE * H E R E 
-       	cjne    debcounter,#1,:t300 	;set debounce time here 10ms per count(decrements in below)
-		
-		
+        jb      trigger_in,:t250
+;*************************************  S E T  * DEBOUNCE * H E R E 
+        cjne    debcounter,#1,:t300     ;set debounce time here 10ms per count(decrements in below)	
         setb    trigger_flag            ;input detected and debounced! trigger the process
-
-		jmp     :t300
+        jmp     :t300
 :t250
-		clr     debcounter				;low not debounceed yet so clear for next try
-		clrb    trigger_active
-		jmp     :t300
+        clr     debcounter              ;low not debounceed yet so clear for next try
+        clrb    trigger_active
+        jmp     :t300
 :t275
-		jb      trigger_in,:t280 		;ok we got a noise pulse in (now for some action)
-		jmp     :t300
-		
+        jb      trigger_in,:t280        ;ok we got a noise pulse in (now for some action)
+        jmp     :t300		
 :t280
-		clrb    trigger_active			; reset for next time
-		
+        clrb    trigger_active          ; reset for next time		
 :t300
 		
 ;----------------------------------------------
 :t600
-		mov     temp1,RTCC
-		mov     W,pre_rtcc
-		mov     W,temp1 - W
-		sub     time10,W
-		jc      :time_exit
+        mov     temp1,RTCC
+        mov     W,pre_rtcc
+        mov     W,temp1 - W
+        sub     time10,W
+        jc      :time_exit
 ;..............................................................................................
 ;Timing Functions
-;.......................................if 10ms has passed do the trigger_ing
-		mov     time10,#TIME10MS
-		inc     mseconds_10 			;use by routines to count in 10ms inc
-		inc     counter_10ms_a
-		inc     counter_10ms_b
-		inc     debcounter
-		inc     debcounter+1
-		inc     debcounter+2
+;...................................... if 10ms has passed do the trigger_ing
+        mov     time10,#TIME10MS
+        inc     mseconds_10             ;use by routines to count in 10ms inc
+        inc     counter_10ms_a
+        inc     counter_10ms_b
+        inc     debcounter
+        inc     debcounter+1
+        inc     debcounter+2
 :t700
-		cjne    mseconds_10,#5,:time_exit
-;........................................if 50ms has passed do the trigger_ing
-		clr     mseconds_10
-		inc     mseconds_50
-		inc     counter_50ms_a          ;use by routines to count in 50ms inc
-		cjne    mseconds_50,#2,:time_exit
-;.......................................if 1 second has pased do the trigger_ing
-		clr     mseconds_50
-		inc    	seconds
-		inc 	counter_seconds
-		xor     RA,#00001000b           ;Flash the life light!
-		cjne    seconds,#60,:time_exit
-;.......................................if 1 minute has passed do the trigger_ing
-		clr    	seconds
-		inc     minutes_a               ;watchdog timmer
-		;inc    minutes
+        cjne    mseconds_10,#5,:time_exit
+;...................................... if 50ms has passed do the trigger_ing
+        clr     mseconds_10
+        inc     mseconds_50
+        inc     counter_50ms_a          ;use by routines to count in 50ms inc
+        cjne    mseconds_50,#2,:time_exit
+;...................................... if 1 second has pased do the trigger_ing
+        clr     mseconds_50
+        inc     seconds
+        inc     counter_seconds
+        xor     RA,#00001000b           ;Flash the life light!
+        cjne    seconds,#60,:time_exit
+;...................................... if 1 minute has passed do the trigger_ing
+        clr     seconds
+        inc     minutes_a               ;watchdog timmer
+        ;inc    minutes
 :time_exit
 
 ;sync the timers
 ;......................................
-		jnb		sync,:tsync				;reset timmers if signaled by sync bit H
-		clr 	counter_10ms_a
-		clr 	counter_10ms_b 
-		clr 	counter_50ms_a
-		clr 	counter_seconds
-		clrb 	sync
+        jnb     sync,:tsync             ;reset timmers if signaled by sync bit H
+        clr     counter_10ms_a
+        clr     counter_10ms_b 
+        clr     counter_50ms_a
+        clr     counter_seconds
+        clrb    sync
 :tsync		
 ;......................................
-		mov     pre_rtcc,temp1
-		clr     temp1
-		ret
+        mov     pre_rtcc,temp1
+        clr     temp1
+        ret
 ;-----------------------------------------------------------------------------------------------
-
 
 ;***********************************************************************************************
 ; Subroutine Block
 
 ;*******************
 clear
-		clr     fsr
-		mov     fsr,#08h
+        clr     fsr
+        mov     fsr,#08h
 :loop
-		clr     00h
-		inc     fsr
-		cjne    fsr,#0E0h,:loop
-		clr     fsr
-		ret
+        clr     00h
+        inc     fsr
+        cjne    fsr,#0E0h,:loop
+        clr     fsr
+        ret
 		
 ;*******************
 
@@ -197,59 +185,58 @@ clear
 ;       Body of main program
 ;**********************************************************************************************
 main
-		call	time
-		jnb		trigger_flag,main		       
+        call    time
+        jnb     trigger_flag,main		       
 process
-		setb 	sync 									;signal reset of timers
+        setb    sync                                    ;signal reset of timers
 :step_1
-		setb	Control 								;turn the monitor off
+        setb    Control                                 ;turn the monitor off
 :step_1b
-		call 	time
-		cjne	counter_seconds,#SECONDS_TIMER,:step_2	;watch for the time out
-		clrb    control 								;Thats it Folks!
-		setb	enu_led		 							;make sure the anunciator LED is off
-		clr  	flag									;make ready for a new trigger
-		jmp		main
+        call    time
+        cjne    counter_seconds,#SECONDS_TIMER,:step_2  ;watch for the time out
+        clrb    control                                 ;Thats it Folks!
+        setb    enu_led                                 ;make sure the anunciator LED is off
+        clr     flag                                    ;make ready for a new trigger
+        jmp     main
 :step_2
-		jb		step_2_flag,:step_3
-		xor     RB,#00000010b 							;toggle the game PCBs
-		setb 	step_2_flag								;toggle only once per sequence event
+        jb      step_2_flag,:step_3
+        xor     RB,#00000010b                           ;toggle the game PCBs
+        setb    step_2_flag                             ;toggle only once per sequence event
 :step_3
-		cjne	counter_10ms_a,#LED_TIME,:step_1b		;use constant to time led(increments of 10ms)
-		xor     RB,#00000100b
-		clr 	counter_10ms_a
-		jmp		:step_1b
-		
+        cjne    counter_10ms_a,#LED_TIME,:step_1b       ;use constant to time led(increments of 10ms)
+        xor     RB,#00000100b
+        clr     counter_10ms_a
+        jmp     :step_1b		
 :end_loop       
-		call    time
-		jmp     :end_loop
+        call    time
+        jmp     :end_loop
 
 ;***********************************************************************************
 ;                       INITALISE SYSTEM
 ;***********************************************************************************
 start
-		mov     OPTION,#00000111b
-		mov     !RA,#00000101b          
-		mov     !RB,#00000000b
-		mov     RA,#11111111b
-		mov     RB,#11111111b
-		clrb	control					;make sure output is low initialy
-		call    clear
+        mov     OPTION,#00000111b
+        mov     !RA,#00000101b          
+        mov     !RB,#00000000b
+        mov     RA,#11111111b
+        mov     RB,#11111111b
+        clrb    control                 ;make sure output is low initialy
+        call    clear
 :s10
 ;       djnz    timer,:s10              ;startup delay
 ;       djnz    timer+1,:s10
-		mov     time10,#time10ms 
-;		setb	enu_led		 			;make sure the anunciator LED is off
-		clr     RTCC
+        mov     time10,#time10ms 
+;       setb    enu_led                 ;make sure the anunciator LED is off
+        clr     RTCC
 		
 :end 
-		jmp     main
+        jmp     main
 	   
-		retw    'RandDelay Rev A'
-		retw    'Copyright 20016'
-		retw    'by Swamp Development'
-		retw    'Nashville, TN.'
-		retw    'For Hirst Technology Inc.'
-		retw    'Ocala, FL.'
+        retw    'RandDelay Rev A'
+        retw    'Copyright 20016'
+        retw    'by Swamp Development'
+        retw    'Nashville, TN.'
+        retw    'For Hirst Technology Inc.'
+        retw    'Ocala, FL.'
 
 :end_of_file
